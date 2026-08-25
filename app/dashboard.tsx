@@ -98,6 +98,12 @@ export default function Dashboard({ initialSubscriptions, user }: { initialSubsc
   const showToast = (message: string, kind: Toast['kind'] = 'success') => setToast({ message, kind });
 
   useEffect(() => {
+    if (!new URL(window.location.href).searchParams.has('google')) return;
+    const timer = window.setTimeout(() => setView('settings'), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
     if (!toast || toast.kind === 'error') return;
     const timer = window.setTimeout(() => setToast(null), 3500);
     return () => window.clearTimeout(timer);

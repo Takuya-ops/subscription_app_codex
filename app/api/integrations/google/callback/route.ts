@@ -51,16 +51,26 @@ export async function GET(request: Request): Promise<Response> {
   if (!state || state.length > 256 || !stored || stored.length > 4096 || providerErrors.length > 1 || codes.length > 1) {
     return redirectResult('expired');
   }
+  let stage: 'verify_state' | 'exchange_code' | 'fetch_profile' | 'save_connection' = 'verify_state';
   try {
     const { verifier } = await verifyGoogleAuthorizationCookie(stored, state, user.userId);
     if (providerErrors.length === 1) return redirectResult('denied');
     const code = codes.length === 1 ? codes[0] : null;
     if (!code || code.length > 4096) return redirectResult('expired');
+    stage = 'exchange_code';
     const tokens = await exchangeGoogleAuthorizationCode(code, verifier);
+    stage = 'fetch_profile';
     const email = await fetchGoogleEmail(tokens.access_token!);
+    stage = 'save_connection';
     await saveGoogleConnection(await ensureSchema(), user.userId, email, tokens);
     return redirectResult('connected');
   } catch (error) {
+    console.error(JSON.stringify({
+      event: 'google_oauth_callback_failed',
+      stage,
+      code: error instanceof GoogleConnectionError ? error.code : 'unexpected',
+      errorType: error instanceof Error ? error.constructor.name : typeof error,
+    }));
     return redirectResult(
       error instanceof GoogleConnectionError && error.code === 'reauthorization_required' ? 'expired' : 'failed',
     );
