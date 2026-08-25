@@ -122,10 +122,14 @@ async function tokenRequest(values: Record<string, string>, requireScope = false
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body: formBody(values),
       signal: AbortSignal.timeout(10_000),
-      redirect: 'error',
     });
-  } catch {
-    throw new GoogleConnectionError('Google認証サーバーに接続できませんでした', 'google_unavailable', 'token_fetch_failed');
+  } catch (error) {
+    const errorName = error instanceof Error && /^[A-Za-z]{1,30}$/u.test(error.name) ? error.name.toLowerCase() : 'unknown';
+    throw new GoogleConnectionError(
+      'Google認証サーバーに接続できませんでした',
+      'google_unavailable',
+      `token_fetch_${errorName}`,
+    );
   }
   const payload = await response.json().catch(() => ({})) as TokenResponse;
   if (!response.ok) {
