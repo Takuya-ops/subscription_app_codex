@@ -69,6 +69,7 @@ export async function GET(request: Request): Promise<Response> {
       event: 'google_oauth_callback_failed',
       stage,
       code: error instanceof GoogleConnectionError ? error.code : 'unexpected',
+      diagnostic: error instanceof GoogleConnectionError ? error.diagnostic : 'unexpected',
       errorType: error instanceof Error ? error.constructor.name : typeof error,
     }));
     return redirectResult(

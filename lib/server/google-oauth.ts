@@ -62,13 +62,16 @@ async function userBoundPurpose(base: string, userId: string): Promise<string> {
 
 export class GoogleConnectionError extends Error {
   readonly code: 'not_configured' | 'not_connected' | 'reauthorization_required' | 'google_unavailable' | 'scan_in_progress';
+  readonly diagnostic: string;
 
   constructor(
     message: string,
     code: 'not_configured' | 'not_connected' | 'reauthorization_required' | 'google_unavailable' | 'scan_in_progress',
+    diagnostic = 'unspecified',
   ) {
     super(message);
     this.code = code;
+    this.diagnostic = diagnostic;
   }
 }
 
@@ -99,14 +102,14 @@ function validateTokenResponse(payload: TokenResponse, requireScope: boolean): v
     !Number.isInteger(payload.expires_in) || payload.expires_in! <= 0 || payload.expires_in! > 86_400 ||
     (payload.token_type && payload.token_type.toLowerCase() !== 'bearer')
   ) {
-    throw new GoogleConnectionError('Google認証を完了できませんでした', 'google_unavailable');
+    throw new GoogleConnectionError('Google認証を完了できませんでした', 'google_unavailable', 'token_payload_invalid');
   }
   if (payload.refresh_token && payload.refresh_token.length > 8192) {
-    throw new GoogleConnectionError('Google認証を完了できませんでした', 'google_unavailable');
+    throw new GoogleConnectionError('Google認証を完了できませんでした', 'google_unavailable', 'token_refresh_payload_invalid');
   }
   if (requireScope || payload.scope !== undefined) {
     if (!hasOnlyGmailReadonlyScope(payload.scope)) {
-      throw new GoogleConnectionError('Gmailの読み取り専用権限を確認できませんでした', 'reauthorization_required');
+      throw new GoogleConnectionError('Gmailの読み取り専用権限を確認できませんでした', 'reauthorization_required', 'token_scope_invalid');
     }
   }
 }
@@ -122,14 +125,18 @@ async function tokenRequest(values: Record<string, string>, requireScope = false
       redirect: 'error',
     });
   } catch {
-    throw new GoogleConnectionError('Google認証サーバーに接続できませんでした', 'google_unavailable');
+    throw new GoogleConnectionError('Google認証サーバーに接続できませんでした', 'google_unavailable', 'token_fetch_failed');
   }
   const payload = await response.json().catch(() => ({})) as TokenResponse;
   if (!response.ok) {
     const reauthorize = payload.error === 'invalid_grant';
+    const safeError = typeof payload.error === 'string' && /^[a-z_]{1,40}$/u.test(payload.error)
+      ? payload.error
+      : 'unknown';
     throw new GoogleConnectionError(
       reauthorize ? 'Googleの許可が期限切れです。再接続してください' : 'Google認証を完了できませんでした',
       reauthorize ? 'reauthorization_required' : 'google_unavailable',
+      `token_http_${response.status}_${safeError}`,
     );
   }
   validateTokenResponse(payload, requireScope);
