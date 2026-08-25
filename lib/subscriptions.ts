@@ -31,6 +31,98 @@ export type Recommendation = {
   reasons: string[];
 };
 
+type PlainDateParts = { year: number; month: number; day: number };
+
+function plainDateParts(value: string): PlainDateParts | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) return null;
+  return { year, month, day };
+}
+
+function formatPlainDate({ year, month, day }: PlainDateParts): string {
+  return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function daysInMonth(year: number, month: number): number {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
+export function isIsoDate(value: unknown): value is string {
+  return typeof value === 'string' && plainDateParts(value) !== null;
+}
+
+export function localIsoDate(date = new Date()): string {
+  return formatPlainDate({ year: date.getFullYear(), month: date.getMonth() + 1, day: date.getDate() });
+}
+
+export function addMonthsClamped(value: string, months: number): string {
+  const parts = plainDateParts(value);
+  if (!parts || !Number.isInteger(months)) return value;
+  const monthIndex = parts.year * 12 + parts.month - 1 + months;
+  const year = Math.floor(monthIndex / 12);
+  const month = ((monthIndex % 12) + 12) % 12 + 1;
+  return formatPlainDate({ year, month, day: Math.min(parts.day, daysInMonth(year, month)) });
+}
+
+export function addDays(value: string, days: number): string {
+  const parts = plainDateParts(value);
+  if (!parts || !Number.isInteger(days)) return value;
+  const date = new Date(Date.UTC(parts.year, parts.month - 1, parts.day + days));
+  return formatPlainDate({ year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate() });
+}
+
+export function addBillingCycles(value: string, cycle: BillingCycle, count = 1): string {
+  if (!Number.isInteger(count)) return value;
+  if (cycle === 'weekly') return addDays(value, count * 7);
+  return addMonthsClamped(value, count * (cycle === 'yearly' ? 12 : 1));
+}
+
+export function nextBillingDateFromStart(
+  startDate: string,
+  cycle: BillingCycle,
+  onOrAfter = localIsoDate(),
+): string {
+  const firstBillingDate = addBillingCycles(startDate, cycle);
+  if (!isIsoDate(startDate) || !isIsoDate(onOrAfter)) return firstBillingDate;
+  let occurrence = 1;
+  if (startDate < onOrAfter) {
+    if (cycle === 'weekly') {
+      occurrence = Math.max(1, Math.ceil(dayDifference(startDate, onOrAfter) / 7));
+    } else {
+      const startParts = plainDateParts(startDate)!;
+      const targetParts = plainDateParts(onOrAfter)!;
+      const monthStep = cycle === 'yearly' ? 12 : 1;
+      const elapsedMonths = (targetParts.year - startParts.year) * 12 + targetParts.month - startParts.month;
+      occurrence = Math.max(1, Math.floor(elapsedMonths / monthStep));
+      while (addBillingCycles(startDate, cycle, occurrence) < onOrAfter) occurrence += 1;
+    }
+  }
+  return addBillingCycles(startDate, cycle, occurrence);
+}
+
+function dayDifference(from: string, to: string): number {
+  const start = plainDateParts(from);
+  const end = plainDateParts(to);
+  if (!start || !end) return 0;
+  const startTime = Date.UTC(start.year, start.month - 1, start.day);
+  const endTime = Date.UTC(end.year, end.month - 1, end.day);
+  return Math.floor((endTime - startTime) / 86_400_000);
+}
+
+export function parseJpyAmount(value: string): number | null {
+  const normalized = value.normalize('NFKC').replace(/\s+/g, '').toUpperCase();
+  const match = /^(?:¥|JPY)?(\d{1,3}(?:,\d{3})*|\d+)(?:円)?$/.exec(normalized);
+  if (!match) return null;
+  const amount = Number(match[1].replaceAll(',', ''));
+  return Number.isSafeInteger(amount) && amount >= 0 && amount <= 100_000_000 ? amount : null;
+}
+
 export function monthlyEquivalent(priceMinor: number, cycle: BillingCycle): number {
   if (cycle === 'yearly') return Math.round(priceMinor / 12);
   if (cycle === 'weekly') return Math.round((priceMinor * 52) / 12);
@@ -38,21 +130,72 @@ export function monthlyEquivalent(priceMinor: number, cycle: BillingCycle): numb
 }
 
 export function activeMonths(startDate: string, now = new Date()): number {
-  const start = new Date(`${startDate}T00:00:00Z`);
-  if (Number.isNaN(start.getTime()) || start > now) return 0;
-  const months = (now.getUTCFullYear() - start.getUTCFullYear()) * 12 + now.getUTCMonth() - start.getUTCMonth();
-  return Math.max(1, months + (now.getUTCDate() >= start.getUTCDate() ? 1 : 0));
+  const start = plainDateParts(startDate);
+  if (!start) return 0;
+  const today = localIsoDate(now);
+  if (startDate > today) return 0;
+  const current = plainDateParts(today);
+  if (!current) return 0;
+  let months = (current.year - start.year) * 12 + current.month - start.month;
+  if (addMonthsClamped(startDate, months) > today) months -= 1;
+  return Math.max(0, months);
 }
 
 export function estimatedPaymentCount(subscription: Pick<Subscription, 'billingCycle' | 'startDate'>, now = new Date()): number {
-  const months = activeMonths(subscription.startDate, now);
-  if (subscription.billingCycle === 'yearly') return Math.max(1, Math.ceil(months / 12));
-  if (subscription.billingCycle === 'weekly') return Math.max(1, Math.round((months * 52) / 12));
-  return months;
+  const today = localIsoDate(now);
+  if (!isIsoDate(subscription.startDate) || subscription.startDate > today) return 0;
+  if (subscription.billingCycle === 'weekly') return Math.floor(dayDifference(subscription.startDate, today) / 7) + 1;
+  if (subscription.billingCycle === 'yearly') {
+    const start = plainDateParts(subscription.startDate)!;
+    const current = plainDateParts(today)!;
+    let years = current.year - start.year;
+    if (addMonthsClamped(subscription.startDate, years * 12) > today) years -= 1;
+    return Math.max(0, years) + 1;
+  }
+  return activeMonths(subscription.startDate, now) + 1;
 }
 
 export function estimatedTotalPaid(subscription: Pick<Subscription, 'billingCycle' | 'startDate' | 'priceMinor'>, now = new Date()): number {
   return estimatedPaymentCount(subscription, now) * subscription.priceMinor;
+}
+
+export function billingOccurrencesBetween(
+  subscription: Pick<Subscription, 'billingCycle' | 'nextBillingDate'>,
+  rangeStart: string,
+  rangeEnd: string,
+): string[] {
+  if (!isIsoDate(rangeStart) || !isIsoDate(rangeEnd) || !isIsoDate(subscription.nextBillingDate)) return [];
+  if (rangeEnd < rangeStart) return [];
+  const anchor = subscription.nextBillingDate;
+  let occurrence = 0;
+  if (anchor < rangeStart) {
+    if (subscription.billingCycle === 'weekly') {
+      occurrence = Math.ceil(dayDifference(anchor, rangeStart) / 7);
+    } else {
+      const anchorParts = plainDateParts(anchor)!;
+      const startParts = plainDateParts(rangeStart)!;
+      const monthStep = subscription.billingCycle === 'yearly' ? 12 : 1;
+      const elapsedMonths = (startParts.year - anchorParts.year) * 12 + startParts.month - anchorParts.month;
+      occurrence = Math.max(0, Math.floor(elapsedMonths / monthStep));
+      while (addBillingCycles(anchor, subscription.billingCycle, occurrence) < rangeStart) occurrence += 1;
+    }
+  }
+  const results: string[] = [];
+  let cursor = addBillingCycles(anchor, subscription.billingCycle, occurrence);
+  for (let count = 0; cursor <= rangeEnd && count < 64; count += 1) {
+    results.push(cursor);
+    occurrence += 1;
+    cursor = addBillingCycles(anchor, subscription.billingCycle, occurrence);
+  }
+  return results;
+}
+
+export function nextBillingOccurrence(
+  subscription: Pick<Subscription, 'billingCycle' | 'nextBillingDate'>,
+  onOrAfter = localIsoDate(),
+): string | null {
+  if (!isIsoDate(onOrAfter)) return null;
+  return billingOccurrencesBetween(subscription, onOrAfter, addBillingCycles(onOrAfter, 'yearly', 200))[0] ?? null;
 }
 
 export function recommendationFor(subscription: Subscription, sameCategoryCount = 1): Recommendation {

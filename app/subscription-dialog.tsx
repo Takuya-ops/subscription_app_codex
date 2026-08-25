@@ -1,12 +1,16 @@
 'use client';
 
-import { useEffect, useMemo, useState, type FormEvent, type MouseEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent } from 'react';
 import {
   activeMonths,
+  addMonthsClamped,
   estimatedPaymentCount,
   estimatedTotalPaid,
   formatYen,
+  localIsoDate,
   monthlyEquivalent,
+  nextBillingDateFromStart,
+  nextBillingOccurrence,
   recommendationFor,
   type BillingCycle,
   type Subscription,
@@ -22,6 +26,7 @@ type Props = {
   dialog: DialogState;
   sameCategoryCount: number;
   busy: boolean;
+  error: string | null;
   onClose: () => void;
   onSave: (payload: SubscriptionPayload, id?: string) => Promise<void>;
   onCheckin: (subscription: Subscription, level: Exclude<UsageLevel, 'unknown'>) => Promise<void>;
@@ -29,12 +34,9 @@ type Props = {
   onEdit: (subscription: Subscription) => void;
 };
 
-const today = () => new Date().toISOString().slice(0, 10);
-const nextMonth = () => {
-  const date = new Date();
-  date.setUTCMonth(date.getUTCMonth() + 1);
-  return date.toISOString().slice(0, 10);
-};
+const today = () => localIsoDate();
+const nextMonth = () => addMonthsClamped(today(), 1);
+const suggestedNextBillingDate = (startDate: string, billingCycle: BillingCycle) => nextBillingDateFromStart(startDate, billingCycle);
 
 const blankPayload = (): SubscriptionPayload => ({
   name: '',
@@ -78,23 +80,66 @@ const cycleLabels: Record<BillingCycle, string> = { weekly: '週払い', monthly
 const sourceLabels: Record<SubscriptionSource, string> = { manual: '手入力', csv: 'CSV', email: '請求メール', store: 'ストア' };
 const statusLabels: Record<SubscriptionStatus, string> = { active: '契約中', paused: '一時停止', cancelled: '解約済み' };
 
-export default function SubscriptionDialog({ dialog, sameCategoryCount, busy, onClose, onSave, onCheckin, onDelete, onEdit }: Props) {
+export default function SubscriptionDialog({ dialog, sameCategoryCount, busy, error, onClose, onSave, onCheckin, onDelete, onEdit }: Props) {
   const isForm = dialog?.type === 'add' || dialog?.type === 'edit';
   const activeSubscription = dialog && dialog.type !== 'add' ? dialog.subscription : null;
   const [form, setForm] = useState<SubscriptionPayload>(() => dialog?.type === 'edit' ? toPayload(dialog.subscription) : blankPayload());
+  const dialogRef = useRef<HTMLElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const onCloseRef = useRef(onClose);
+  const busyRef = useRef(busy);
+
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+  useEffect(() => { busyRef.current = busy; }, [busy]);
 
   useEffect(() => {
     if (!dialog) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const background = Array.from(document.querySelectorAll<HTMLElement>('.sidebar, .main, .mobile-nav'));
+    background.forEach((element) => element.setAttribute('inert', ''));
     const keydown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !busy) onClose();
+      if (event.key === 'Escape' && !busyRef.current) {
+        event.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== 'Tab' || !dialogRef.current) return;
+      const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
+      )).filter((element) => !element.hasAttribute('hidden'));
+      if (!focusable.length) {
+        event.preventDefault();
+        dialogRef.current.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!dialogRef.current.contains(document.activeElement)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+      } else if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     document.body.classList.add('modal-open');
     window.addEventListener('keydown', keydown);
+    const frame = window.requestAnimationFrame(() => {
+      const preferred = dialogRef.current?.querySelector<HTMLElement>('[autofocus]');
+      (preferred ?? closeButtonRef.current)?.focus();
+    });
     return () => {
+      window.cancelAnimationFrame(frame);
       document.body.classList.remove('modal-open');
       window.removeEventListener('keydown', keydown);
+      background.forEach((element) => element.removeAttribute('inert'));
+      if (previousFocus?.isConnected) previousFocus.focus();
+      else document.querySelector<HTMLElement>('#main-content')?.focus();
     };
-  }, [dialog, busy, onClose]);
+  }, [dialog]);
 
   const recommendation = useMemo(
     () => activeSubscription ? recommendationFor(activeSubscription, sameCategoryCount) : null,
@@ -114,24 +159,25 @@ export default function SubscriptionDialog({ dialog, sameCategoryCount, busy, on
 
   return (
     <div className="modal-overlay" onMouseDown={closeFromOverlay}>
-      <section className="dialog-card" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
+      <section className="dialog-card" role="dialog" aria-modal="true" aria-labelledby="dialog-title" aria-describedby={error ? 'dialog-error' : undefined} aria-busy={busy} tabIndex={-1} ref={dialogRef}>
         <header className="dialog-head">
           <div>
             <p className="eyebrow">{isForm ? 'SUBSCRIPTION' : 'DETAIL'}</p>
             <h2 id="dialog-title">{dialog.type === 'add' ? 'サブスクを追加' : dialog.type === 'edit' ? '登録内容を編集' : dialog.subscription.name}</h2>
           </div>
-          <button className="dialog-close" type="button" onClick={onClose} disabled={busy} aria-label="閉じる">×</button>
+          <button className="dialog-close" type="button" onClick={onClose} disabled={busy} aria-label="閉じる" ref={closeButtonRef}>×</button>
         </header>
 
         {isForm ? (
           <form className="subscription-form" onSubmit={submit}>
+            {error && <p className="dialog-error" id="dialog-error" role="alert">{error}</p>}
             <div className="form-grid">
               <label className="field field-wide"><span>サービス名</span><input required maxLength={80} value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="例：Netflix" autoFocus /></label>
               <label className="field"><span>プラン名</span><input required maxLength={80} value={form.plan} onChange={(event) => setForm({ ...form, plan: event.target.value })} placeholder="スタンダード" /></label>
               <label className="field"><span>カテゴリ</span><select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}><option>動画</option><option>音楽</option><option>仕事・効率化</option><option>クラウド</option><option>学習</option><option>家計管理</option><option>健康</option><option>ニュース</option><option>その他</option></select></label>
               <label className="field"><span>請求額</span><span className="input-prefix"><i>¥</i><input required min="0" max="100000000" step="1" inputMode="numeric" type="number" value={form.priceMinor || ''} onChange={(event) => setForm({ ...form, priceMinor: Number(event.target.value) })} /></span></label>
-              <label className="field"><span>請求周期</span><select value={form.billingCycle} onChange={(event) => setForm({ ...form, billingCycle: event.target.value as BillingCycle })}><option value="weekly">週払い</option><option value="monthly">月払い</option><option value="yearly">年払い</option></select></label>
-              <label className="field"><span>利用開始日</span><input required type="date" value={form.startDate} onChange={(event) => setForm({ ...form, startDate: event.target.value })} /></label>
+              <label className="field"><span>請求周期</span><select value={form.billingCycle} onChange={(event) => { const billingCycle = event.target.value as BillingCycle; setForm({ ...form, billingCycle, nextBillingDate: suggestedNextBillingDate(form.startDate, billingCycle) }); }}><option value="weekly">週払い</option><option value="monthly">月払い</option><option value="yearly">年払い</option></select></label>
+              <label className="field"><span>利用開始日</span><input required type="date" value={form.startDate} onChange={(event) => { const startDate = event.target.value; setForm({ ...form, startDate, nextBillingDate: suggestedNextBillingDate(startDate, form.billingCycle) }); }} /></label>
               <label className="field"><span>次回更新日</span><input required type="date" value={form.nextBillingDate} onChange={(event) => setForm({ ...form, nextBillingDate: event.target.value })} /></label>
               <label className="field"><span>大切さ</span><select value={form.importance} onChange={(event) => setForm({ ...form, importance: Number(event.target.value) })}><option value="1">1 — なくても困らない</option><option value="2">2 — 低め</option><option value="3">3 — 普通</option><option value="4">4 — 大切</option><option value="5">5 — 必須</option></select></label>
               <label className="field"><span>満足度</span><select value={form.satisfaction ?? ''} onChange={(event) => setForm({ ...form, satisfaction: event.target.value ? Number(event.target.value) : null })}><option value="">まだ評価しない</option><option value="1">1 — 不満</option><option value="2">2</option><option value="3">3 — 普通</option><option value="4">4</option><option value="5">5 — とても満足</option></select></label>
@@ -144,6 +190,7 @@ export default function SubscriptionDialog({ dialog, sameCategoryCount, busy, on
           </form>
         ) : activeSubscription && recommendation ? (
           <div className="detail-body">
+            {error && <p className="dialog-error" id="dialog-error" role="alert">{error}</p>}
             <div className="detail-hero">
               <div className={`service-mark service-mark-large tone-${activeSubscription.name.charCodeAt(0) % 6}`} aria-hidden="true">{activeSubscription.name.slice(0, 1).toUpperCase()}</div>
               <div><p>{activeSubscription.plan}</p><strong>{formatYen(activeSubscription.priceMinor)}</strong><span> / {cycleLabels[activeSubscription.billingCycle]}</span></div>
@@ -151,9 +198,9 @@ export default function SubscriptionDialog({ dialog, sameCategoryCount, busy, on
             </div>
 
             <div className="detail-stats">
-              <article><span>利用期間</span><strong>{activeMonths(activeSubscription.startDate)}か月</strong><small>{activeSubscription.startDate} から</small></article>
-              <article><span>推定支払回数</span><strong>{estimatedPaymentCount(activeSubscription)}回</strong><small>確認データ不足のため推定</small></article>
-              <article><span>推定累計</span><strong>{formatYen(estimatedTotalPaid(activeSubscription))}</strong><small>実請求の取込で精度向上</small></article>
+              <article><span>利用期間</span><strong>{activeMonths(activeSubscription.startDate) === 0 ? '1か月未満' : `${activeMonths(activeSubscription.startDate)}か月`}</strong><small>{activeSubscription.startDate} からの経過期間</small></article>
+              <article><span>推定支払回数</span><strong>{activeSubscription.status === 'active' ? `${estimatedPaymentCount(activeSubscription)}回` : '—'}</strong><small>{activeSubscription.status === 'active' ? '開始日の請求を含む推定' : '終了日の記録がないため算出外'}</small></article>
+              <article><span>推定累計</span><strong>{activeSubscription.status === 'active' ? formatYen(estimatedTotalPaid(activeSubscription)) : '—'}</strong><small>{activeSubscription.status === 'active' ? '実請求の取込で精度向上' : '解約・停止後は実請求を確認'}</small></article>
             </div>
 
             <section className="recommendation-box">
@@ -172,7 +219,7 @@ export default function SubscriptionDialog({ dialog, sameCategoryCount, busy, on
 
             <dl className="detail-list">
               <div><dt>月額換算</dt><dd>{formatYen(monthlyEquivalent(activeSubscription.priceMinor, activeSubscription.billingCycle))}</dd></div>
-              <div><dt>次回更新</dt><dd>{activeSubscription.nextBillingDate}</dd></div>
+              <div><dt>次回更新</dt><dd>{activeSubscription.status === 'active' ? nextBillingOccurrence(activeSubscription) ?? activeSubscription.nextBillingDate : activeSubscription.nextBillingDate}</dd></div>
               <div><dt>カテゴリ</dt><dd>{activeSubscription.category}</dd></div>
               <div><dt>登録元</dt><dd>{sourceLabels[activeSubscription.source]}</dd></div>
               <div><dt>最終利用</dt><dd>{activeSubscription.lastUsedDate ?? '未確認'}</dd></div>

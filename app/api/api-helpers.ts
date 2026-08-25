@@ -1,6 +1,6 @@
 import { getChatGPTUser, type ChatGPTUser } from '@/app/chatgpt-auth';
 import type { SubscriptionInput } from '@/db/subscription-store';
-import type { BillingCycle, SubscriptionSource, SubscriptionStatus, UsageLevel } from '@/lib/subscriptions';
+import { isIsoDate, type BillingCycle, type SubscriptionSource, type SubscriptionStatus, type UsageLevel } from '@/lib/subscriptions';
 
 export function errorResponse(message: string, status: number): Response {
   return Response.json({ error: message }, { status });
@@ -21,15 +21,33 @@ export function isSameOrigin(request: Request): boolean {
   }
 }
 
+export async function readJsonBody(
+  request: Request,
+  maxBytes = 64_000,
+): Promise<{ value?: unknown; error?: Response }> {
+  const contentType = request.headers.get('content-type')?.toLowerCase() ?? '';
+  if (!contentType.startsWith('application/json')) {
+    return { error: errorResponse('JSON形式で送信してください', 415) };
+  }
+  const declaredLength = Number(request.headers.get('content-length') ?? 0);
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    return { error: errorResponse('入力サイズが上限を超えています', 413) };
+  }
+  const text = await request.text();
+  if (new TextEncoder().encode(text).byteLength > maxBytes) {
+    return { error: errorResponse('入力サイズが上限を超えています', 413) };
+  }
+  try {
+    return { value: JSON.parse(text) as unknown };
+  } catch {
+    return { error: errorResponse('JSONを読み取れませんでした', 400) };
+  }
+}
+
 const cycles: BillingCycle[] = ['weekly', 'monthly', 'yearly'];
 const usageLevels: UsageLevel[] = ['often', 'sometimes', 'rarely', 'unknown'];
 const sources: SubscriptionSource[] = ['manual', 'csv', 'email', 'store'];
 const statuses: SubscriptionStatus[] = ['active', 'paused', 'cancelled'];
-
-function isDate(value: unknown): value is string {
-  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  return !Number.isNaN(new Date(`${value}T00:00:00Z`).getTime());
-}
 
 function stringValue(value: unknown, max: number): string | null {
   if (typeof value !== 'string') return null;
@@ -44,20 +62,22 @@ export function parseSubscriptionInput(value: unknown): { value?: SubscriptionIn
   const plan = stringValue(body.plan, 80) ?? 'スタンダード';
   const category = stringValue(body.category, 40) ?? 'その他';
   const notes = typeof body.notes === 'string' ? body.notes.trim().slice(0, 500) : '';
-  const priceMinor = Number(body.priceMinor);
-  const importance = Number(body.importance);
-  const satisfaction = body.satisfaction == null || body.satisfaction === '' ? null : Number(body.satisfaction);
+  const priceMinor = typeof body.priceMinor === 'number' ? body.priceMinor : Number.NaN;
+  const importance = typeof body.importance === 'number' ? body.importance : Number.NaN;
+  const satisfaction = body.satisfaction == null ? null : typeof body.satisfaction === 'number' ? body.satisfaction : Number.NaN;
 
   if (!name) return { error: 'サービス名を入力してください' };
+  if (body.currency !== 'JPY') return { error: '現在対応している通貨はJPYのみです' };
   if (!Number.isSafeInteger(priceMinor) || priceMinor < 0 || priceMinor > 100_000_000) return { error: '料金は0〜1億円の整数で入力してください' };
   if (!cycles.includes(body.billingCycle as BillingCycle)) return { error: '請求周期を確認してください' };
-  if (!isDate(body.startDate) || !isDate(body.nextBillingDate)) return { error: '日付を確認してください' };
+  if (!isIsoDate(body.startDate) || !isIsoDate(body.nextBillingDate)) return { error: '日付を確認してください' };
+  if (body.nextBillingDate < body.startDate) return { error: '次回更新日は利用開始日以降にしてください' };
   if (!Number.isInteger(importance) || importance < 1 || importance > 5) return { error: '重要度を確認してください' };
   if (satisfaction != null && (!Number.isInteger(satisfaction) || satisfaction < 1 || satisfaction > 5)) return { error: '満足度を確認してください' };
   if (!usageLevels.includes(body.usageLevel as UsageLevel)) return { error: '利用状況を確認してください' };
   if (!sources.includes(body.source as SubscriptionSource)) return { error: '登録元を確認してください' };
   if (!statuses.includes(body.status as SubscriptionStatus)) return { error: '契約状態を確認してください' };
-  if (body.lastUsedDate != null && body.lastUsedDate !== '' && !isDate(body.lastUsedDate)) return { error: '最終利用日を確認してください' };
+  if (body.lastUsedDate != null && body.lastUsedDate !== '' && !isIsoDate(body.lastUsedDate)) return { error: '最終利用日を確認してください' };
 
   return {
     value: {

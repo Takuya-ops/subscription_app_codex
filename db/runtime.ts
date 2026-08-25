@@ -75,7 +75,10 @@ export async function ensureSchema(): Promise<D1Database> {
       db.prepare('CREATE INDEX IF NOT EXISTS idx_charges_user_subscription_date ON charges(user_id, subscription_id, charged_on)'),
     ]);
     await db.prepare('PRAGMA optimize').run();
-  })();
+  })().catch((error) => {
+    schemaPromise = null;
+    throw error;
+  });
 
   await schemaPromise;
   return db;

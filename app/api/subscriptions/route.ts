@@ -1,6 +1,6 @@
 import { ensureSchema } from '@/db/runtime';
-import { insertSubscription, listSubscriptions, seedSubscriptions } from '@/db/subscription-store';
-import { apiUser, errorResponse, isSameOrigin, parseSubscriptionInput } from '@/app/api/api-helpers';
+import { insertSubscription, listSubscriptions } from '@/db/subscription-store';
+import { apiUser, errorResponse, isSameOrigin, parseSubscriptionInput, readJsonBody } from '@/app/api/api-helpers';
 
 export const dynamic = 'force-dynamic';
 
@@ -8,8 +8,10 @@ export async function GET(): Promise<Response> {
   const user = await apiUser();
   if (user instanceof Response) return user;
   const db = await ensureSchema();
-  await seedSubscriptions(db, user.userId);
-  return Response.json({ subscriptions: await listSubscriptions(db, user.userId) });
+  return Response.json(
+    { subscriptions: await listSubscriptions(db, user.userId) },
+    { headers: { 'cache-control': 'private, no-store' } },
+  );
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -17,9 +19,11 @@ export async function POST(request: Request): Promise<Response> {
   const user = await apiUser();
   if (user instanceof Response) return user;
 
-  let body: unknown;
-  try { body = await request.json(); } catch { return errorResponse('JSONを読み取れませんでした', 400); }
-  const parsed = parseSubscriptionInput(body);
+  const body = await readJsonBody(request);
+  if (body.error) return body.error;
+  const parsed = parseSubscriptionInput(
+    body.value && typeof body.value === 'object' ? { ...body.value, source: 'manual' } : body.value,
+  );
   if (!parsed.value) return errorResponse(parsed.error ?? '入力内容を確認してください', 400);
 
   const db = await ensureSchema();
