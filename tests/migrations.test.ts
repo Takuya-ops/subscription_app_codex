@@ -19,6 +19,18 @@ test('D1移行は既存データと外部キーを保持する', () => {
   `);
 
   db.exec(migration('0001_silly_hairball.sql'));
+  db.exec(migration('0002_medical_beast.sql'));
+  db.exec(`
+    INSERT INTO google_connections VALUES(
+      'u1','owner@example.com','encrypted-access','encrypted-refresh','2026-08-25T00:00:00.000Z',
+      'https://www.googleapis.com/auth/gmail.readonly',NULL,datetime('now'),datetime('now')
+    );
+    INSERT INTO gmail_import_candidates VALUES(
+      'g1','u1','fingerprint','message1','Netflix','Netflix',1490,'JPY','monthly',
+      '2026-08-25','2026-08-25',1,95,NULL,'2026-09-01T00:00:00.000Z',datetime('now'),datetime('now')
+    );
+  `);
+  db.exec(migration('0003_supreme_toro.sql'));
 
   const counts = db.prepare(`
     SELECT
@@ -34,8 +46,32 @@ test('D1移行は既存データと外部キーを保持する', () => {
   assert.deepEqual(usageParents.map((row) => row.table), ['subscriptions']);
   assert.deepEqual(chargeParents.map((row) => row.table), ['subscriptions']);
 
+  const googleColumns = db.prepare("PRAGMA table_info('google_connections')").all() as Array<{ name: string; pk: number }>;
+  const candidateColumns = db.prepare("PRAGMA table_info('gmail_import_candidates')").all() as Array<{ name: string }>;
+  assert.equal(googleColumns.find((column) => column.name === 'user_id')?.pk, 1);
+  assert.ok(candidateColumns.some((column) => column.name === 'fingerprint'));
+  assert.ok(candidateColumns.some((column) => column.name === 'imported_at'));
+  assert.ok(googleColumns.some((column) => column.name === 'scan_started_at'));
+  assert.ok(googleColumns.some((column) => column.name === 'gmail_page_token'));
+  assert.equal(db.prepare('SELECT count(*) AS count FROM gmail_import_candidates').get()?.count, 1);
+
+  const candidateParents = db.prepare("PRAGMA foreign_key_list('gmail_import_candidates')").all() as Array<{ table: string }>;
+  const eventParents = db.prepare("PRAGMA foreign_key_list('gmail_import_events')").all() as Array<{ table: string }>;
+  assert.deepEqual(candidateParents.map((row) => row.table), ['google_connections']);
+  assert.deepEqual(eventParents.map((row) => row.table), ['subscriptions']);
+  db.exec(`
+    INSERT INTO gmail_import_events VALUES('e1','u1','fingerprint','2026-08-25','s1',datetime('now'));
+  `);
+  assert.throws(() => db.exec(`
+    INSERT INTO gmail_import_events VALUES('e2','u1','fingerprint','2026-08-25','s1',datetime('now'));
+  `), /UNIQUE constraint failed/u);
+
   db.exec("DELETE FROM subscriptions WHERE id='s1'");
   assert.equal(db.prepare('SELECT count(*) AS count FROM usage_checkins').get()?.count, 0);
   assert.equal(db.prepare('SELECT count(*) AS count FROM charges').get()?.count, 0);
+  assert.equal(db.prepare('SELECT count(*) AS count FROM gmail_import_events').get()?.count, 0);
+  db.exec("DELETE FROM google_connections WHERE user_id='u1'");
+  assert.equal(db.prepare('SELECT count(*) AS count FROM gmail_import_candidates').get()?.count, 0);
+  assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
   db.close();
 });

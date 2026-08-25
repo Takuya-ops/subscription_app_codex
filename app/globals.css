@@ -289,7 +289,7 @@ button { color: inherit; font: inherit; }
 
 @media (max-width: 500px) {
   .summary-grid { grid-template-columns: 1fr; }
-  .summary-card, .summary-card:last-child { grid-column: auto; min-height: 168px; }
+  .summary-card, .summary-card:last-child { grid-column: auto; min-height: 210px; }
   .panel { padding: 18px 15px; }
   .data-note { display: none; }
   .payment-row { grid-template-columns: 38px minmax(0, 1fr) auto; }
@@ -455,6 +455,37 @@ button:focus-visible, a:focus-visible { outline: 3px solid #1d6b47; outline-offs
 .connection-card > button { grid-column: 1 / -1; min-height: 37px; border: 1px solid #dfe5e1; border-radius: 11px; background: #fafbfa; color: #526058; cursor: pointer; font-size: 9px; font-weight: 750; }
 .connection-card > button:disabled { cursor: not-allowed; opacity: .6; }
 .connection-card > small { grid-column: 1 / -1; color: #99a19c; font-size: 7px; line-height: 1.45; }
+.gmail-connection-card, .gmail-connection-card + .connection-card { grid-column: 1 / -1; }
+.gmail-card-heading { min-width: 0; }
+.gmail-actions { display: flex; grid-column: 1 / -1; align-items: center; flex-wrap: wrap; gap: 9px; border-top: 1px solid #edf0ed; padding-top: 13px; }
+.gmail-actions > button, .connection-button { display: inline-flex; min-height: 40px; align-items: center; justify-content: center; border: 1px solid #d7e1da; border-radius: 11px; background: #f7faf8; padding: 0 14px; color: #425249; cursor: pointer; font-size: 12px; font-weight: 750; text-decoration: none; }
+.gmail-actions > button:hover, .connection-button:hover { border-color: #b9cec0; background: #f0f6f2; }
+.gmail-actions > button:disabled { cursor: wait; opacity: .62; }
+.gmail-actions > .text-button { border-color: transparent; background: transparent; color: #6a776f; }
+.gmail-actions > small { color: #68756d; font-size: 12px; line-height: 1.5; }
+.gmail-account { display: grid; min-width: min(300px, 100%); margin-right: auto !important; }
+.gmail-account span, .gmail-account small { color: #68756d; font-size: 12px; }
+.gmail-account strong { overflow: hidden; color: #39483f; font-size: 13px; text-overflow: ellipsis; }
+.gmail-notice { grid-column: 1 / -1; border-radius: 11px; padding: 10px 12px; font-size: 12px !important; line-height: 1.55 !important; }
+.gmail-notice.success { background: #eaf4ed; color: #265e40; }
+.gmail-notice.error { background: #fbeae7; color: #873a30; }
+.gmail-candidates { display: grid; grid-column: 1 / -1; gap: 12px; border-top: 1px solid #e7ebe8; padding-top: 15px; }
+.gmail-candidates-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.gmail-candidates-head strong, .gmail-candidates-head small { display: block; }
+.gmail-candidates-head strong { font-size: 14px; }
+.gmail-candidates-head small, .gmail-candidates-head > span { margin-top: 4px; color: #66746b; font-size: 12px; line-height: 1.45; }
+.gmail-candidate-list { display: grid; gap: 7px; }
+.gmail-candidate { display: grid; grid-template-columns: 22px minmax(150px, 1fr) minmax(90px, auto) minmax(100px, auto) auto; align-items: center; gap: 10px; border: 1px solid #e3e8e4; border-radius: 12px; padding: 11px; cursor: pointer; }
+.gmail-candidate:hover { border-color: #bfd1c4; background: #fbfdfb; }
+.gmail-candidate input { width: 18px; height: 18px; accent-color: var(--green); }
+.gmail-candidate strong, .gmail-candidate small { display: block; }
+.gmail-candidate strong { font-size: 12px; }
+.gmail-candidate small { margin-top: 3px; color: #66736b; font-size: 11px; }
+.confidence { border-radius: 99px; padding: 5px 7px; font-size: 11px; font-style: normal; font-weight: 750; white-space: nowrap; }
+.confidence-high { background: #e4f2e8; color: #28724b; }
+.confidence-medium { background: #f4eddc; color: #77561c; }
+.gmail-import-button { justify-self: end; min-height: 42px; border: 0; border-radius: 11px; background: var(--green); padding: 0 16px; color: white; cursor: pointer; font-size: 12px; font-weight: 800; }
+.gmail-import-button:disabled { cursor: not-allowed; opacity: .5; }
 .budget-setting { display: grid; grid-template-columns: minmax(0, 1fr) 140px auto; align-items: center; gap: 14px; padding: 18px; }
 .budget-setting strong, .budget-setting small { display: block; }
 .budget-setting strong { font-size: 10px; }
@@ -567,6 +598,8 @@ button:focus-visible, a:focus-visible { outline: 3px solid #1d6b47; outline-offs
   .analysis-hero { align-items: flex-start; flex-direction: column; }
   .savings-card { width: 100%; border-top: 1px solid rgba(55, 101, 73, .15); border-left: 0; padding: 15px 0 0; }
   .connection-grid { grid-template-columns: 1fr; }
+  .gmail-candidate { grid-template-columns: 22px minmax(0, 1fr) auto; }
+  .gmail-candidate > span:nth-of-type(3), .gmail-candidate > .confidence { grid-column: 2 / -1; }
   .budget-setting { grid-template-columns: 1fr auto; }
   .budget-setting > div { grid-column: 1 / -1; }
   .privacy-actions { grid-template-columns: 1fr; }
@@ -593,6 +626,13 @@ button:focus-visible, a:focus-visible { outline: 3px solid #1d6b47; outline-offs
   .account-row .connected-chip { grid-column: 1 / -1; }
   .account-row .signout-link { grid-column: 1 / -1; justify-self: start; }
   .budget-setting { grid-template-columns: 1fr; }
+  .gmail-actions { align-items: stretch; flex-direction: column; }
+  .gmail-actions > button, .connection-button { width: 100%; }
+  .gmail-account { width: 100%; }
+  .gmail-candidates-head { flex-direction: column; }
+  .gmail-candidate { grid-template-columns: 22px minmax(0, 1fr); }
+  .gmail-candidate > span { grid-column: 2; }
+  .gmail-import-button { width: 100%; justify-self: stretch; }
   .budget-setting .secondary-button { justify-self: start; }
   .form-grid { grid-template-columns: 1fr; }
   .field-wide { grid-column: auto; }
@@ -618,6 +658,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid #1d6b47; outline-offs
 .detail-stats small, .recommendation-score span, .recommendation-score small,
 .recommendation-label-row small, .recommendation-box ul, .checkin-box p,
 .detail-list dt, .detail-list dd { color: #637068; font-size: 12px; }
+.summary-card > small { line-height: 1.4; }
 .search-field input, .budget-setting input, .field input, .field select, .field textarea { font-size: 16px; }
 .filter-tabs button, .connection-card > button, .secondary-button, .danger-button,
 .danger-text-button, .checkin-actions button { font-size: 12px; }

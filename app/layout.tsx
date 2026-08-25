@@ -11,6 +11,7 @@ export const metadata: Metadata = {
   description: '支払い・利用実感・更新日をまとめて管理し、続けるべきサブスクを見える化する管理アプリ。',
   applicationName: 'Looply',
   manifest: '/manifest.webmanifest',
+  icons: { icon: '/icon-192.png', apple: '/icon-192.png' },
   appleWebApp: { capable: true, statusBarStyle: 'default', title: 'Looply' },
   openGraph: {
     type: 'website',

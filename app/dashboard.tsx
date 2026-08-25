@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import SubscriptionDialog, { type DialogState, type SubscriptionPayload } from '@/app/subscription-dialog';
+import GmailIntegration from '@/app/gmail-integration';
 import { parseCsvStrict } from '@/lib/csv';
 import {
   activeMonths,
@@ -341,7 +342,7 @@ export default function Dashboard({ initialSubscriptions, user }: { initialSubsc
         {view === 'subscriptions' && <SubscriptionsView subscriptions={subscriptions} categoryCounts={categoryCounts} search={search} statusFilter={statusFilter} onSearch={setSearch} onFilter={setStatusFilter} onDetail={openDetail} onAdd={openAdd} />}
         {view === 'calendar' && <CalendarView subscriptions={subscriptions} onDetail={openDetail} />}
         {view === 'analysis' && <AnalysisView subscriptions={subscriptions} categoryCounts={categoryCounts} onDetail={openDetail} onAdd={openAdd} onViewSubscriptions={() => setView('subscriptions')} />}
-        {view === 'settings' && <SettingsView user={user} budget={monthlyBudget} busy={busy} onBudget={changeBudget} onChooseCsv={() => csvInput.current?.click()} onDownloadCsvTemplate={downloadCsvTemplate} onExport={exportData} onDelete={deleteAllData} />}
+        {view === 'settings' && <SettingsView user={user} budget={monthlyBudget} busy={busy} onBudget={changeBudget} onChooseCsv={() => csvInput.current?.click()} onDownloadCsvTemplate={downloadCsvTemplate} onExport={exportData} onDelete={deleteAllData} onGmailImported={(imported) => setSubscriptions((current) => { const updates = new Map(imported.map((item) => [item.id, item])); return [...current.map((item) => updates.get(item.id) ?? item), ...imported.filter((item) => !current.some((existing) => existing.id === item.id))]; })} />}
       </main>
 
       <nav className="mobile-nav" aria-label="モバイルメニュー">
@@ -434,9 +435,10 @@ type SettingsViewProps = {
   onDownloadCsvTemplate: () => void;
   onExport: () => void;
   onDelete: () => void;
+  onGmailImported: (subscriptions: Subscription[]) => void;
 };
 
-function SettingsView({ user, budget, busy, onBudget, onChooseCsv, onDownloadCsvTemplate, onExport, onDelete }: SettingsViewProps) {
+function SettingsView({ user, budget, busy, onBudget, onChooseCsv, onDownloadCsvTemplate, onExport, onDelete, onGmailImported }: SettingsViewProps) {
   const [draftBudget, setDraftBudget] = useState(String(budget));
   const submitBudget = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -457,13 +459,7 @@ function SettingsView({ user, budget, busy, onBudget, onChooseCsv, onDownloadCsv
       <section className="settings-section">
         <div className="settings-title"><p className="eyebrow">IMPORT & CONNECTIONS</p><h2>データを取り込む</h2><p>元データと推定値を区別し、取り込み後に必ず確認できます。</p></div>
         <div className="connection-grid">
-          <article className="connection-card">
-            <div className="connection-icon google-icon">G</div>
-            <div><h3>Gmailの請求メール</h3><p>請求・領収メールから候補を抽出します。本文は保存せず、確認後に登録する設計です。</p></div>
-            <span className="pending-chip">未接続</span>
-            <button type="button" disabled title="Google OAuthの認証情報と審査が必要です">認証情報の設定後に有効</button>
-            <small>Googleログインとは別の読み取り許可が必要です。</small>
-          </article>
+          <GmailIntegration onImported={onGmailImported} />
           <article className="connection-card">
             <div className="connection-icon csv-icon">CSV</div>
             <div><h3>サブスク一覧CSV</h3><p>契約一覧を事前検証し、すべての行が正しい場合だけ一括登録します。</p></div>
@@ -487,7 +483,7 @@ function SettingsView({ user, budget, busy, onBudget, onChooseCsv, onDownloadCsv
         <div className="settings-card privacy-actions">
           <div><strong>データを書き出す</strong><small>登録・利用記録・請求履歴をJSONで取得します。</small></div>
           <button className="secondary-button" type="button" onClick={onExport} disabled={busy}>書き出す</button>
-          <div><strong>サブスクデータを全削除</strong><small>サブスク、利用記録、請求履歴を削除します。アカウント認証は残ります。</small></div>
+          <div><strong>サブスクデータを全削除</strong><small>サブスク、利用記録、請求履歴、Gmail接続を削除します。ChatGPTのアカウント認証は残ります。</small></div>
           <button className="danger-button" type="button" onClick={onDelete} disabled={busy}>全削除</button>
         </div>
       </section>

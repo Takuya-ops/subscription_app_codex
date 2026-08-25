@@ -12,6 +12,8 @@ export async function apiUser(): Promise<ChatGPTUser | Response> {
 }
 
 export function isSameOrigin(request: Request): boolean {
+  const fetchSite = request.headers.get('sec-fetch-site');
+  if (fetchSite && fetchSite !== 'same-origin' && fetchSite !== 'none') return false;
   const origin = request.headers.get('origin');
   if (!origin) return true;
   try {

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Looply">
+  <rect width="512" height="512" rx="128" fill="#1D6B47"/>
+  <g fill="none" stroke="#FFFFFF" stroke-width="30" transform="rotate(-18 256 256)">
+    <ellipse cx="204" cy="196" rx="90" ry="52"/>
+    <ellipse cx="308" cy="316" rx="90" ry="52"/>
+  </g>
+</svg>
