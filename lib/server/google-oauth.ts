@@ -219,14 +219,22 @@ export async function fetchGoogleEmail(accessToken: string): Promise<string> {
     response = await fetch(PROFILE_ENDPOINT, {
       headers: { authorization: `Bearer ${accessToken}`, accept: 'application/json' },
       signal: AbortSignal.timeout(10_000),
-      redirect: 'error',
     });
-  } catch {
-    throw new GoogleConnectionError('Gmailプロフィールを確認できませんでした', 'google_unavailable');
+  } catch (error) {
+    const errorName = error instanceof Error && /^[A-Za-z]{1,30}$/u.test(error.name) ? error.name.toLowerCase() : 'unknown';
+    throw new GoogleConnectionError(
+      'Gmailプロフィールを確認できませんでした',
+      'google_unavailable',
+      `profile_fetch_${errorName}`,
+    );
   }
   const payload = await response.json().catch(() => ({})) as { emailAddress?: string };
   if (!response.ok || typeof payload.emailAddress !== 'string' || !payload.emailAddress.includes('@')) {
-    throw new GoogleConnectionError('Gmailプロフィールを確認できませんでした', 'google_unavailable');
+    throw new GoogleConnectionError(
+      'Gmailプロフィールを確認できませんでした',
+      'google_unavailable',
+      `profile_http_${response.status}`,
+    );
   }
   return payload.emailAddress.slice(0, 254);
 }
@@ -436,7 +444,6 @@ export async function disconnectGoogle(db: D1Database, userId: string): Promise<
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: formBody({ token }),
         signal: AbortSignal.timeout(8_000),
-        redirect: 'error',
       });
       providerRevoked = response.ok;
     } catch {

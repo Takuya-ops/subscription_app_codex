@@ -25,7 +25,6 @@ async function gmailFetch<T>(accessToken: string, url: URL): Promise<T> {
       response = await fetch(url, {
         headers: { authorization: `Bearer ${accessToken}`, accept: 'application/json' },
         signal: AbortSignal.timeout(12_000),
-        redirect: 'error',
       });
     } catch {
       if (attempt < 2) {
