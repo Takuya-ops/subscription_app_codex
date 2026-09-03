@@ -88,6 +88,20 @@ export default function UiAcademy() {
   const selectedIndex = visiblePatterns.findIndex((pattern) => pattern.id === selectedPattern.id);
   const progress = Math.round((completed.size / uiPatterns.length) * 100);
 
+  const showPatternFromStart = () => {
+    window.requestAnimationFrame(() => {
+      const detail = detailRef.current;
+      if (!detail) return;
+
+      const overflowY = window.getComputedStyle(detail).overflowY;
+      const hasIndependentScroll = overflowY === 'auto' || overflowY === 'scroll';
+
+      if (hasIndependentScroll) detail.scrollTo({ top: 0 });
+      else detail.scrollIntoView({ block: 'start' });
+      detail.focus({ preventScroll: true });
+    });
+  };
+
   const selectPattern = (id: string) => {
     setSelectedId(id);
     setDemoState('通常');
@@ -95,7 +109,7 @@ export default function UiAcademy() {
     const url = new URL(window.location.href);
     url.searchParams.set('pattern', id);
     window.history.replaceState({}, '', url);
-    window.requestAnimationFrame(() => detailRef.current?.focus({ preventScroll: true }));
+    showPatternFromStart();
   };
 
   const saveCompleted = (next: Set<string>) => {
