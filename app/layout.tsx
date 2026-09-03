@@ -7,22 +7,22 @@ const metadataBase = new URL(configuredOrigin?.startsWith('https://') ? configur
 
 export const metadata: Metadata = {
   metadataBase,
-  title: 'Looply | サブスクを、納得して続ける',
-  description: '支払い・利用実感・更新日をまとめて管理し、続けるべきサブスクを見える化する管理アプリ。',
-  applicationName: 'Looply',
+  title: 'UI Atlas | 触って学ぶWeb・スマホUI図鑑',
+  description: 'UIの名前、使いどころ、避ける場面、実在アプリの例をライブデモで学べるインタラクティブ図鑑。',
+  applicationName: 'UI Atlas',
   manifest: '/manifest.webmanifest',
-  icons: { icon: '/icon-192.png', apple: '/icon-192.png' },
-  appleWebApp: { capable: true, statusBarStyle: 'default', title: 'Looply' },
+  icons: { icon: '/favicon.svg' },
+  appleWebApp: { capable: true, statusBarStyle: 'default', title: 'UI Atlas' },
   openGraph: {
     type: 'website',
-    title: 'Looply | サブスクを、納得して続ける',
-    description: '支払い・利用実感・更新日をまとめて、続ける価値を見える化。',
+    title: 'UI Atlas | 触って学ぶWeb・スマホUI図鑑',
+    description: 'UIの名前と使い分けを、99のライブデモで学べるインタラクティブ図鑑。',
     images: [{ url: '/og.png', width: 1792, height: 925, alt: 'Looply — サブスクを、納得して続ける。' }],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Looply | サブスクを、納得して続ける',
-    description: '支払い・利用実感・更新日をまとめて、続ける価値を見える化。',
+    title: 'UI Atlas | 触って学ぶWeb・スマホUI図鑑',
+    description: 'UIの名前と使い分けを、99のライブデモで学べるインタラクティブ図鑑。',
     images: ['/og.png'],
   },
 };

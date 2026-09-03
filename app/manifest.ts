@@ -2,19 +2,15 @@ import type { MetadataRoute } from 'next';
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'Looply — サブスク管理',
-    short_name: 'Looply',
-    description: '支払い・利用実感・更新日をまとめて、続ける価値を見える化します。',
+    name: 'UI Atlas — 触って学ぶUI図鑑',
+    short_name: 'UI Atlas',
+    description: 'Web・スマホUIの名前と使いどころを、ライブデモで学べます。',
     start_url: '/',
     display: 'standalone',
-    background_color: '#F5F7F3',
-    theme_color: '#1D6B47',
+    background_color: '#EEF2F8',
+    theme_color: '#14213D',
     lang: 'ja',
-    categories: ['finance', 'productivity', 'utilities'],
-    icons: [
-      { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
-      { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
-      { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
-    ],
+    categories: ['education', 'design', 'productivity'],
+    icons: [{ src: '/favicon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }],
   };
 }
